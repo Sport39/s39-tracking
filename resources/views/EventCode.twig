@@ -1,0 +1,155 @@
+{#
+  Ereignisse fuer TikTok und Meta.
+  Dieses Skript laeuft immer, meldet aber nur an einen Pixel, wenn dessen
+  Basiscode (HeadCode.twig) nach Einwilligung geladen wurde (window.ttq / window.fbq).
+  Ceres schaltet die Pixel-Skripte beim "load"-Ereignis frei; unser load-Listener
+  wird danach registriert und laeuft deshalb erst, wenn ttq/fbq existieren.
+#}
+{% set s39Order = null %}
+{% if trackOrder %}
+    {% set latest = services.customer.getLatestOrder() %}
+    {% if latest is defined and latest.order is defined %}
+        {% set s39Items = [] %}
+        {% for item in latest.order.orderItems %}
+            {% if item.typeId == 1 or item.typeId == 2 or item.typeId == 3 %}
+                {% set s39Items = s39Items|merge([{
+                    "id": item.variation.number|default(item.itemVariationId),
+                    "name": item.orderItemName,
+                    "quantity": item.quantity,
+                    "price": item.amounts[0].priceGross
+                }]) %}
+            {% endif %}
+        {% endfor %}
+        {% set s39Order = {
+            "id": latest.order.id,
+            "value": latest.order.amounts[0].grossTotal,
+            "currency": latest.order.amounts[0].currency,
+            "items": s39Items
+        } %}
+    {% endif %}
+{% endif %}
+<script>
+(function () {
+    var DEBUG = {{ config("S39Tracking.debug") == "1" ? "true" : "false" }};
+    var ORDER = {{ s39Order|json_encode|raw }};
+
+    function log() {
+        if (DEBUG && window.console) { console.log.apply(console, ["[S39Tracking]"].concat([].slice.call(arguments))); }
+    }
+
+    function hasTT() { return !!(window.ttq && typeof window.ttq.track === "function"); }
+    function hasFB() { return typeof window.fbq === "function"; }
+
+    /*
+     * Ein Ereignis an beide Pixel melden.
+     * tt / fb: Ereignisname je Plattform (null = nicht melden)
+     */
+    function send(tt, fb, data, eventId) {
+        data = data || {};
+        if (tt && hasTT()) {
+            window.ttq.track(tt, data.tt || {}, eventId ? { event_id: eventId } : undefined);
+            log("TikTok", tt, data.tt, eventId);
+        }
+        if (fb && hasFB()) {
+            window.fbq("track", fb, data.fb || {}, eventId ? { eventID: eventId } : undefined);
+            log("Meta", fb, data.fb, eventId);
+        }
+    }
+
+    window.S39Tracking = { send: send };
+
+    /* ---------- Artikelansicht ---------- */
+    function trackViewContent() {
+        try {
+            var store = window.vueApp && window.vueApp.$store;
+            var v = store && store.getters.currentItemVariation;
+            if (!v || !v.variation) { return; }
+            var price = v.prices && v.prices.default && v.prices.default.unitPrice ? v.prices.default.unitPrice.value : undefined;
+            var cur = v.prices && v.prices.default ? v.prices.default.currency : "EUR";
+            var id = String(v.variation.number || v.variation.id);
+            var name = v.texts ? v.texts.name1 : "";
+            send("ViewContent", "ViewContent", {
+                tt: { contents: [{ content_id: id, content_name: name, content_type: "product", price: price }], value: price, currency: cur },
+                fb: { content_ids: [id], content_name: name, content_type: "product", value: price, currency: cur }
+            });
+        } catch (e) { log("ViewContent Fehler", e); }
+    }
+
+    /* ---------- In den Warenkorb ---------- */
+    document.addEventListener("afterBasketItemAdded", function (e) {
+        try {
+            var b = (e && e.detail) || {};
+            var qty = b.quantity || 1;
+            var price = b.price || (b.variation && b.variation.data && b.variation.data.prices && b.variation.data.prices.default ? b.variation.data.prices.default.unitPrice.value : undefined);
+            var id = String((b.variation && b.variation.data && b.variation.data.variation && b.variation.data.variation.number) || b.variationId || "");
+            var value = price ? Math.round(price * qty * 100) / 100 : undefined;
+            send("AddToCart", "AddToCart", {
+                tt: { contents: [{ content_id: id, content_type: "product", quantity: qty, price: price }], value: value, currency: "EUR" },
+                fb: { content_ids: [id], content_type: "product", value: value, currency: "EUR" }
+            });
+        } catch (err) { log("AddToCart Fehler", err); }
+    });
+
+    /* ---------- Anfragen (Leads) ---------- */
+    // 1) Teamshop-Anfrage (/teamshops/): eigenes Formular
+    document.addEventListener("submit", function (e) {
+        var f = e.target;
+        if (!f || f.id !== "newTeamShopRequestForm") { return; }
+        if (typeof f.checkValidity === "function" && !f.checkValidity()) { return; }
+        send("SubmitForm", "Lead", {
+            tt: { content_name: "Teamshop-Anfrage" },
+            fb: { content_name: "Teamshop-Anfrage", content_category: "Verein" }
+        }, "teamshop-" + Date.now());
+    }, true);
+
+    // 2) Kontaktformular (ShopBuilder) – erst melden, wenn Plenty den Versand bestaetigt
+    (function () {
+        var open = XMLHttpRequest.prototype.open;
+        var sendXhr = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            this._s39url = String(url || "");
+            return open.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function () {
+            var xhr = this;
+            if (/\/rest\/io\/customer\/contact\/mail/.test(xhr._s39url)) {
+                xhr.addEventListener("load", function () {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        send("Contact", "Contact", {
+                            tt: { content_name: "Kontaktformular" },
+                            fb: { content_name: "Kontaktformular" }
+                        }, "kontakt-" + Date.now());
+                        // Kontaktanfragen zaehlen fuer uns auch als Lead
+                        send("SubmitForm", "Lead", {
+                            tt: { content_name: "Kontaktformular" },
+                            fb: { content_name: "Kontaktformular" }
+                        }, "kontakt-lead-" + Date.now());
+                    }
+                });
+            }
+            return sendXhr.apply(this, arguments);
+        };
+    })();
+
+    /* ---------- Kauf (Bestellbestaetigung) ---------- */
+    function trackPurchase() {
+        if (!ORDER || !ORDER.id) { return; }
+        var ids = [], contents = [], num = 0;
+        (ORDER.items || []).forEach(function (i) {
+            ids.push(String(i.id));
+            contents.push({ content_id: String(i.id), content_name: i.name, content_type: "product", quantity: i.quantity, price: i.price });
+            num += i.quantity || 0;
+        });
+        send("CompletePayment", "Purchase", {
+            tt: { contents: contents, value: ORDER.value, currency: ORDER.currency || "EUR" },
+            fb: { content_ids: ids, content_type: "product", num_items: num, value: ORDER.value, currency: ORDER.currency || "EUR" }
+        }, "order-" + ORDER.id);
+    }
+
+    window.addEventListener("load", function () {
+        log("aktiv", { tiktok: hasTT(), meta: hasFB(), order: ORDER });
+        trackViewContent();
+        trackPurchase();
+    });
+})();
+</script>
