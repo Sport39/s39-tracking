@@ -1,0 +1,32 @@
+{
+  "name": "S39Tracking",
+  "description": "TikTok- und Meta-Pixel fuer sport39.de mit Einwilligung ueber den Cookie-Banner (Sport39)",
+  "namespace": "S39Tracking",
+  "author": "Sport39",
+  "type": "template",
+  "version": "0.1.0",
+  "license": "proprietary",
+  "isClosedSource": false,
+  "serviceProvider": "S39Tracking\\Providers\\S39TrackingServiceProvider",
+  "require": {
+    "IO": ">=5.0.0"
+  },
+  "javaScriptFiles": [],
+  "containers": [],
+  "dataProviders": [
+    {
+      "key": "S39Tracking\\Providers\\HeadCodeProvider",
+      "name": "S39 Tracking: Pixel-Basiscode",
+      "description": "Laedt TikTok- und Meta-Pixel (nur nach Einwilligung)",
+      "defaultLayoutContainer": "Ceres::Template.Style"
+    },
+    {
+      "key": "S39Tracking\\Providers\\EventCodeProvider",
+      "name": "S39 Tracking: Ereignisse",
+      "description": "Artikelansicht, Warenkorb, Anfragen und Kauf an die Pixel melden",
+      "defaultLayoutContainer": "Ceres::Script.AfterScriptsLoaded"
+    }
+  ],
+  "dependencies": [],
+  "runOnBuild": []
+}

@@ -1,0 +1,50 @@
+{
+  "formatVersion": 1,
+  "menu": {
+    "settings": {
+      "label": "S39 Tracking",
+      "formFields": {
+        "tiktokPixelId": {
+          "type": "inputText",
+          "required": false,
+          "label": "TikTok Pixel-Code (leer = TikTok aus)",
+          "options": {
+            "defaultValue": "DBEEF23C77UAFNQJ1P40"
+          }
+        },
+        "metaPixelId": {
+          "type": "inputText",
+          "required": false,
+          "label": "Meta Pixel-ID (leer = Meta aus)",
+          "options": {
+            "defaultValue": "555701531288537"
+          }
+        },
+        "consentGroup": {
+          "type": "selectBox",
+          "required": false,
+          "label": "Gruppe im Cookie-Banner",
+          "options": {
+            "defaultValue": "tracking",
+            "selectBoxValues": [
+              { "value": "tracking", "caption": "Tracking" },
+              { "value": "marketing", "caption": "Marketing" }
+            ]
+          }
+        },
+        "debug": {
+          "type": "selectBox",
+          "required": false,
+          "label": "Ereignisse in der Browser-Konsole ausgeben (nur zum Testen)",
+          "options": {
+            "defaultValue": "0",
+            "selectBoxValues": [
+              { "value": "0", "caption": "Nein" },
+              { "value": "1", "caption": "Ja" }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
