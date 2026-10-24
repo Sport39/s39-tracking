@@ -131,6 +131,31 @@
         };
     })();
 
+    /* ---------- Teamshop-Anfrage: Sprung zum Formular stabilisieren ----------
+       Links aus Anzeigen gehen auf /teamshops/#teamshopanfrage. Die Logo-Wand
+       laedt Bilder nach und schiebt das Formular nach unten, sodass Besucher
+       sonst mitten in der Wand landen. Wir springen deshalb mehrmals nach,
+       bis die Seite steht - aber nur, solange der Besucher nicht selbst scrollt. */
+    (function () {
+        if (window.location.hash !== "#teamshopanfrage") { return; }
+        var userMoved = false;
+        ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) {
+            window.addEventListener(ev, function () { userMoved = true; }, { passive: true, once: true });
+        });
+        function jump() {
+            if (userMoved) { return; }
+            var target = document.getElementById("teamshopanfrage");
+            if (!target) { return; }
+            var top = target.getBoundingClientRect().top + window.pageYOffset - 80;
+            window.scrollTo(0, top);
+        }
+        [300, 1000, 2000, 3500, 5000].forEach(function (ms) { setTimeout(jump, ms); });
+        window.addEventListener("load", function () {
+            jump();
+            setTimeout(jump, 600);
+        });
+    })();
+
     /* ---------- Kauf (Bestellbestaetigung) ---------- */
     function trackPurchase() {
         if (!ORDER || !ORDER.id) { return; }
