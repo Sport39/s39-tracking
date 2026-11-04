@@ -13,7 +13,7 @@ TikTok-Pixel und Meta-Pixel für sport39.de – nur nach Einwilligung im Cookie-
 | Jede Seite | Pageview | PageView |
 | Artikelseite | ViewContent | ViewContent |
 | In den Warenkorb | AddToCart | AddToCart |
-| Teamshop-Anfrage (/teamshops/) | SubmitForm | Lead |
+| Teamshop-Anfrage (/teamshops/ und /teamshop-anfrage/) | SubmitForm | Lead |
 | Kontaktformular (/webshop/kontakt/) | Contact + SubmitForm | Contact + Lead |
 | Bestellbestätigung | CompletePayment (mit Wert) | Purchase (mit Wert) |
 
@@ -35,3 +35,7 @@ Zusätzlich: TikTok Events Manager → Pixel → „Ereignisse testen“, Meta E
 ## Datenschutz
 
 In der Datenschutzerklärung je einen Absatz zu TikTok Pixel und Meta Pixel ergänzen.
+
+## Teamshop-Anfrage: Versand
+
+Das TeamShops-Plugin stellt Anfragen mit eingetragener E-Mail-Adresse nicht zu. S39Tracking fängt deshalb das Absenden des Formulars auf /teamshops/ ab und verschickt die Anfrage über den Mailversand des Kontaktformulars an webshop@sport39.de (Betreff „Teamshop-Anfrage: <Verein>“, Antworten gehen an den Verein). Die Landingpage /teamshop-anfrage/ nutzt denselben Weg mit eigenem Skript. Teamshop-Anfragen werden nur einmal als Lead gemeldet, nicht zusätzlich als Kontakt.

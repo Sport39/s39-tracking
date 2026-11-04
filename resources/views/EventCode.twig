@@ -110,9 +110,11 @@
             this._s39url = String(url || "");
             return open.apply(this, arguments);
         };
-        XMLHttpRequest.prototype.send = function () {
+        XMLHttpRequest.prototype.send = function (body) {
             var xhr = this;
-            if (/\/rest\/io\/customer\/contact\/mail/.test(xhr._s39url)) {
+            // Teamshop-Anfragen laufen auch ueber diesen Weg, sind aber schon beim Absenden als Lead gemeldet
+            var isTeamshop = /subject=Teamshop-Anfrage/.test(String(body || ""));
+            if (!isTeamshop && /\/rest\/io\/customer\/contact\/mail/.test(xhr._s39url)) {
                 xhr.addEventListener("load", function () {
                     if (xhr.status >= 200 && xhr.status < 300) {
                         send("Contact", "Contact", {
@@ -129,6 +131,118 @@
             }
             return sendXhr.apply(this, arguments);
         };
+    })();
+
+    /* ---------- Teamshop-Anfrage (/teamshops/): Versand ueber den Shop-Mailversand ----------
+       Das TeamShops-Plugin stellt Anfragen mit eingetragener E-Mail-Adresse nicht zu.
+       Wir fangen das Absenden deshalb vor dem Plugin ab und schicken die Anfrage ueber
+       den Mailversand des Kontaktformulars an webshop@sport39.de.
+       Die Landingpage /teamshop-anfrage/ hat ein eigenes Skript und wird hier uebersprungen. */
+    (function () {
+        var KEY = "6LfixN4nAAAAAPdZOEsM_qA2KWR28qLb3PZsVH9n";
+        var RECIPIENT = "webshop@sport39.de";
+
+        function val(f, name) {
+            var e = f.elements[name];
+            return e ? String(e.value || "").trim() : "";
+        }
+
+        function getToken(cb) {
+            var done = false;
+            function fin(t) { if (!done) { done = true; cb(t || ""); } }
+            setTimeout(fin, 6000);
+            function run() {
+                try {
+                    window.grecaptcha.ready(function () {
+                        window.grecaptcha.execute(KEY, { action: "homepage" }).then(fin, function () { fin(""); });
+                    });
+                } catch (err) { fin(""); }
+            }
+            if (window.grecaptcha && window.grecaptcha.execute) { run(); return; }
+            var s = document.createElement("script");
+            s.src = "https://www.google.com/recaptcha/api.js?render=" + KEY;
+            s.onload = run;
+            s.onerror = function () { fin(""); };
+            document.head.appendChild(s);
+        }
+
+        function fieldId() {
+            return ("6aca" + Math.random().toString(16).slice(2) + "000000000").slice(0, 13);
+        }
+
+        window.addEventListener("submit", function (e) {
+            var f = e.target;
+            if (!f || f.id !== "newTeamShopRequestForm") { return; }
+            if (document.getElementById("tsa-rueckruf")) { return; } // Landingpage
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (typeof f.reportValidity === "function" && !f.reportValidity()) { return; }
+
+            send("SubmitForm", "Lead", {
+                tt: { content_name: "Teamshop-Anfrage" },
+                fb: { content_name: "Teamshop-Anfrage", content_category: "Verein" }
+            }, "teamshop-" + Date.now());
+
+            var btn = f.querySelector("[type=submit]");
+            var btnText = btn ? (btn.value || btn.textContent) : "";
+            if (btn) { btn.disabled = true; if (btn.tagName === "INPUT") { btn.value = "Wird gesendet …"; } else { btn.textContent = "Wird gesendet …"; } }
+
+            var name = [val(f, "firstname"), val(f, "lastname")].join(" ").trim();
+            var rows = [
+                ["Verein", val(f, "vereinsname")],
+                ["Ansprechpartner", val(f, "ansprechpartner")],
+                ["Telefon", val(f, "telefon")],
+                ["E-Mail", val(f, "email")]
+            ];
+            if (name) { rows.push(["Name (Formular)", name]); }
+            if (val(f, "position")) { rows.push(["Position im Verein", val(f, "position")]); }
+            if (val(f, "bemerkung")) { rows.push(["Bemerkung", val(f, "bemerkung")]); }
+            rows.push(["Quelle", "Teamshop-Seite sport39.de/teamshops/"]);
+
+            function fail() {
+                if (btn) { btn.disabled = false; if (btn.tagName === "INPUT") { btn.value = btnText; } else { btn.textContent = btnText; } }
+                var m = document.getElementById("s39-ts-err");
+                if (!m) {
+                    m = document.createElement("p");
+                    m.id = "s39-ts-err";
+                    m.style.color = "#e30613";
+                    m.textContent = "Das hat leider nicht geklappt. Bitte ruft uns an: 0391 6225790 oder schreibt an webshop@sport39.de.";
+                    f.appendChild(m);
+                }
+            }
+
+            getToken(function (token) {
+                var enc = encodeURIComponent, p = [];
+                rows.forEach(function (r) {
+                    var k = fieldId();
+                    p.push("data[" + k + "][label]=" + enc(r[0]), "data[" + k + "][value]=" + enc(r[1]));
+                });
+                p.push(
+                    "data[username][label]=" + enc("Ceres::Template.mailFormHoneypotLabel"),
+                    "data[username][value]=",
+                    "recipient=" + enc(RECIPIENT),
+                    "subject=" + enc("Teamshop-Anfrage: " + val(f, "vereinsname")),
+                    "replyTo[mail]=" + enc(val(f, "email")),
+                    "replyTo[name]=" + enc(val(f, "ansprechpartner") || name),
+                    "recaptchaToken=" + enc(token),
+                    "templateType=contact"
+                );
+                var x = new XMLHttpRequest();
+                x.open("POST", "/rest/io/customer/contact/mail/");
+                x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                x.setRequestHeader("Accept", "application/json, text/javascript, */*; q=0.01");
+                x.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+                x.onload = function () {
+                    if (x.status >= 200 && x.status < 300) {
+                        f.innerHTML = '<h3 style="margin:0 0 6px">Danke – eure Anfrage ist da!</h3>' +
+                            '<p style="margin:0">Wir melden uns schnellstmöglich bei euch. Eilig? Ruft uns an: ' +
+                            '<a href="tel:+493916225790">0391 6225790</a></p>';
+                    } else { fail(); }
+                };
+                x.onerror = fail;
+                x.send(p.join("&"));
+            });
+        }, true);
     })();
 
     /* ---------- Teamshop-Anfrage: Sprung zum Formular stabilisieren ----------
