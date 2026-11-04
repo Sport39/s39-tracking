@@ -38,4 +38,4 @@ In der Datenschutzerklärung je einen Absatz zu TikTok Pixel und Meta Pixel erg�
 
 ## Teamshop-Anfrage: Versand
 
-Das TeamShops-Plugin stellt Anfragen mit eingetragener E-Mail-Adresse nicht zu. S39Tracking fängt deshalb das Absenden des Formulars auf /teamshops/ ab und verschickt die Anfrage über den Mailversand des Kontaktformulars an webshop@sport39.de (Betreff „Teamshop-Anfrage: <Verein>“, Antworten gehen an den Verein). Die Landingpage /teamshop-anfrage/ nutzt denselben Weg mit eigenem Skript. Teamshop-Anfragen werden nur einmal als Lead gemeldet, nicht zusätzlich als Kontakt.
+Das Formular auf /teamshops/ verschickt weiterhin das TeamShops-Plugin. Die Landingpage /teamshop-anfrage/ verschickt ihre Anfragen über den Mailversand des Kontaktformulars an webshop@sport39.de (Betreff „Teamshop-Anfrage: <Verein>“). Diese Anfragen werden nur einmal als Lead gemeldet, nicht zusätzlich als Kontakt.
