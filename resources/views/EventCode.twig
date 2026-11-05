@@ -19,22 +19,22 @@
                     "name": item.orderItemName,
                     "quantity": item.quantity,
                     "price": item.amounts[0].priceGross,
-                    "priceNet": item.amounts[0].priceNet
+                    "priceNet": item.amounts[0].priceNet|default(0)
                 }]) %}
             {% endif %}
             {# Netto-Warenwert ohne Versand: Artikel (1), Artikelpakete (2) und Gutscheine (4, negativ) #}
             {% if item.typeId == 1 or item.typeId == 2 or item.typeId == 4 %}
-                {% set s39Net = s39Net + (item.amounts[0].priceNet * item.quantity) %}
+                {% set s39Net = s39Net + (item.amounts[0].priceNet|default(0) * item.quantity) %}
             {% endif %}
             {% if item.typeId == 6 %}
-                {% set s39Ship = s39Ship + (item.amounts[0].priceGross * item.quantity) %}
+                {% set s39Ship = s39Ship + (item.amounts[0].priceGross|default(0) * item.quantity) %}
             {% endif %}
         {% endfor %}
         {% set s39Order = {
             "id": latest.order.id,
             "value": latest.order.amounts[0].grossTotal,
             "valueNet": s39Net|round(2),
-            "tax": latest.order.amounts[0].vatTotal,
+            "tax": latest.order.amounts[0].vatTotal|default(0),
             "shipping": s39Ship|round(2),
             "currency": latest.order.amounts[0].currency,
             "items": s39Items
