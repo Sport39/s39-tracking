@@ -20,6 +20,26 @@
             "defaultValue": "555701531288537"
           }
         },
+        "gtmContainerId": {
+          "type": "inputText",
+          "required": false,
+          "label": "Google Tag Manager Container-ID, z. B. GTM-ABC1234 (leer = Tag Manager aus)",
+          "options": {
+            "defaultValue": ""
+          }
+        },
+        "soluteEnabled": {
+          "type": "selectBox",
+          "required": false,
+          "label": "billiger.de / solute Conversion-Tracking",
+          "options": {
+            "defaultValue": "1",
+            "selectBoxValues": [
+              { "value": "1", "caption": "An" },
+              { "value": "0", "caption": "Aus" }
+            ]
+          }
+        },
         "consentGroup": {
           "type": "selectBox",
           "required": false,

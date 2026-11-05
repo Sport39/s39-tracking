@@ -1,6 +1,102 @@
 {% set s39Group = config("S39Tracking.consentGroup") ?: "tracking" %}
 {% set s39TikTok = config("S39Tracking.tiktokPixelId") %}
 {% set s39Meta = config("S39Tracking.metaPixelId") %}
+{% set s39Gtm = config("S39Tracking.gtmContainerId")|trim %}
+{% set s39Solute = config("S39Tracking.soluteEnabled") != "0" %}
+
+{#
+  Grundgeruest (laeuft immer, setzt selbst keine Cookies):
+   - dataLayer fuer den Google Tag Manager
+   - S39Consent(name): fragt die Einwilligung im Plenty-Cookie-Banner ab
+   - Google Consent Mode v2: Standard "abgelehnt", nach Zustimmung "erteilt"
+   - GTM-Container wird erst geladen, wenn "Google Analytics & Google Ads" erlaubt ist
+#}
+<script>
+(function () {
+    var GROUP = "{{ s39Group|e('js') }}";
+    var GTM_ID = "{{ s39Gtm|e('js') }}";
+    var w = window;
+    w.dataLayer = w.dataLayer || [];
+    w.s39gtag = function () { w.dataLayer.push(arguments); };
+
+    function isConsented(name) {
+        try {
+            if (w.App && w.App.config && w.App.config.global && w.App.config.global.blockCookies === false) { return true; }
+            return !!(w.ConsentManager && w.ConsentManager.isConsented(GROUP + "." + name));
+        } catch (e) { return false; }
+    }
+    w.S39Consent = isConsented;
+
+    if (GTM_ID) {
+        w.s39gtag("consent", "default", {
+            ad_storage: "denied",
+            analytics_storage: "denied",
+            ad_user_data: "denied",
+            ad_personalization: "denied",
+            wait_for_update: 500
+        });
+    }
+
+    w.S39LoadGtm = function () {
+        if (!GTM_ID || w.__s39GtmLoaded) { return; }
+        w.__s39GtmLoaded = true;
+        w.dataLayer.push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+        var s = document.createElement("script");
+        s.async = true;
+        s.src = "https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(GTM_ID);
+        document.head.appendChild(s);
+    };
+
+    var last = null;
+    w.S39ConsentSync = function () {
+        var state = {
+            google: isConsented("s39Google"),
+            meta: isConsented("s39Meta"),
+            tiktok: isConsented("s39TikTok"),
+            solute: isConsented("s39Solute")
+        };
+        var key = JSON.stringify(state);
+        if (key === last) { return; }
+        last = key;
+        if (GTM_ID) {
+            var g = state.google ? "granted" : "denied";
+            w.s39gtag("consent", "update", {
+                ad_storage: g,
+                analytics_storage: g,
+                ad_user_data: g,
+                ad_personalization: g
+            });
+        }
+        w.dataLayer.push({ event: "s39_consent_update", s39_consent: state });
+        if (state.google) { w.S39LoadGtm(); }
+    };
+
+    w.addEventListener("load", w.S39ConsentSync);
+    document.addEventListener("consent-change", function () { setTimeout(w.S39ConsentSync, 0); });
+})();
+</script>
+
+{% if s39Gtm %}
+<script type="text/plain" data-cookie-consent="{{ s39Group }}.s39Google">
+window.S39ConsentSync && window.S39ConsentSync();
+</script>
+{% endif %}
+
+{% if s39Solute %}
+{# billiger.de / solute: Klick-ID merken (Landingpage-Tracking nach solute-Leitfaden) #}
+<script type="text/plain" data-cookie-consent="{{ s39Group }}.s39Solute">
+(function () {
+    try {
+        var u = window.location.href;
+        if (u.indexOf("soluteclid") < 0) { return; }
+        window.localStorage.setItem("soluteclid", new Date().getTime() + " " + u);
+        var r = new XMLHttpRequest();
+        r.open("GET", "https://cmodul.solutenetwork.com/landing?url=" + encodeURIComponent(u), true);
+        r.send();
+    } catch (e) {}
+})();
+</script>
+{% endif %}
 
 {% if s39TikTok %}
 <script type="text/plain" data-cookie-consent="{{ s39Group }}.s39TikTok">

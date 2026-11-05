@@ -10,19 +10,32 @@
     {% set latest = services.customer.getLatestOrder() %}
     {% if latest is defined and latest.order is defined %}
         {% set s39Items = [] %}
+        {% set s39Net = 0 %}
+        {% set s39Ship = 0 %}
         {% for item in latest.order.orderItems %}
             {% if item.typeId == 1 or item.typeId == 2 or item.typeId == 3 %}
                 {% set s39Items = s39Items|merge([{
                     "id": item.variation.number|default(item.itemVariationId),
                     "name": item.orderItemName,
                     "quantity": item.quantity,
-                    "price": item.amounts[0].priceGross
+                    "price": item.amounts[0].priceGross,
+                    "priceNet": item.amounts[0].priceNet
                 }]) %}
+            {% endif %}
+            {# Netto-Warenwert ohne Versand: Artikel (1), Artikelpakete (2) und Gutscheine (4, negativ) #}
+            {% if item.typeId == 1 or item.typeId == 2 or item.typeId == 4 %}
+                {% set s39Net = s39Net + (item.amounts[0].priceNet * item.quantity) %}
+            {% endif %}
+            {% if item.typeId == 6 %}
+                {% set s39Ship = s39Ship + (item.amounts[0].priceGross * item.quantity) %}
             {% endif %}
         {% endfor %}
         {% set s39Order = {
             "id": latest.order.id,
             "value": latest.order.amounts[0].grossTotal,
+            "valueNet": s39Net|round(2),
+            "tax": latest.order.amounts[0].vatTotal,
+            "shipping": s39Ship|round(2),
             "currency": latest.order.amounts[0].currency,
             "items": s39Items
         } %}
@@ -32,6 +45,7 @@
 (function () {
     var DEBUG = {{ config("S39Tracking.debug") == "1" ? "true" : "false" }};
     var ORDER = {{ s39Order|json_encode|raw }};
+    var SOLUTE = {{ config("S39Tracking.soluteEnabled") != "0" ? "true" : "false" }};
 
     function log() {
         if (DEBUG && window.console) { console.log.apply(console, ["[S39Tracking]"].concat([].slice.call(arguments))); }
@@ -56,7 +70,25 @@
         }
     }
 
-    window.S39Tracking = { send: send };
+    /*
+     * Ereignis in den dataLayer (Google Tag Manager) schreiben.
+     * Der dataLayer ist nur eine Liste im Browser – der Tag Manager liest ihn
+     * erst, wenn er nach Einwilligung geladen wurde.
+     */
+    function dl(event, ecommerce, extra) {
+        var w = window;
+        w.dataLayer = w.dataLayer || [];
+        var entry = { event: event };
+        if (ecommerce) {
+            w.dataLayer.push({ ecommerce: null });
+            entry.ecommerce = ecommerce;
+        }
+        if (extra) { for (var k in extra) { if (extra.hasOwnProperty(k)) { entry[k] = extra[k]; } } }
+        w.dataLayer.push(entry);
+        log("dataLayer", entry);
+    }
+
+    window.S39Tracking = { send: send, dl: dl };
 
     /* ---------- Artikelansicht ---------- */
     function trackViewContent() {
@@ -71,6 +103,11 @@
             send("ViewContent", "ViewContent", {
                 tt: { contents: [{ content_id: id, content_name: name, content_type: "product", price: price }], value: price, currency: cur },
                 fb: { content_ids: [id], content_name: name, content_type: "product", value: price, currency: cur }
+            });
+            dl("view_item", {
+                currency: cur,
+                value: price,
+                items: [{ item_id: id, item_name: name, price: price, quantity: 1 }]
             });
         } catch (e) { log("ViewContent Fehler", e); }
     }
@@ -87,6 +124,11 @@
                 tt: { contents: [{ content_id: id, content_type: "product", quantity: qty, price: price }], value: value, currency: "EUR" },
                 fb: { content_ids: [id], content_type: "product", value: value, currency: "EUR" }
             });
+            dl("add_to_cart", {
+                currency: "EUR",
+                value: value,
+                items: [{ item_id: id, price: price, quantity: qty }]
+            });
         } catch (err) { log("AddToCart Fehler", err); }
     });
 
@@ -100,6 +142,7 @@
             tt: { content_name: "Teamshop-Anfrage" },
             fb: { content_name: "Teamshop-Anfrage", content_category: "Verein" }
         }, "teamshop-" + Date.now());
+        dl("generate_lead", null, { lead_type: "Teamshop-Anfrage" });
     }, true);
 
     // 2) Kontaktformular (ShopBuilder) – erst melden, wenn Plenty den Versand bestaetigt
@@ -126,6 +169,7 @@
                             tt: { content_name: "Kontaktformular" },
                             fb: { content_name: "Kontaktformular" }
                         }, "kontakt-lead-" + Date.now());
+                        dl("generate_lead", null, { lead_type: "Kontaktformular" });
                     }
                 });
             }
@@ -171,6 +215,47 @@
             tt: { contents: contents, value: ORDER.value, currency: ORDER.currency || "EUR" },
             fb: { content_ids: ids, content_type: "product", num_items: num, value: ORDER.value, currency: ORDER.currency || "EUR" }
         }, "order-" + ORDER.id);
+
+        // Google (GA4 / Google Ads ueber den Tag Manager): value = Netto-Warenwert ohne Versand
+        dl("purchase", {
+            transaction_id: String(ORDER.id),
+            value: ORDER.valueNet,
+            tax: ORDER.tax,
+            shipping: ORDER.shipping,
+            currency: ORDER.currency || "EUR",
+            items: (ORDER.items || []).map(function (i) {
+                return { item_id: String(i.id), item_name: i.name, price: i.priceNet, quantity: i.quantity };
+            })
+        }, { s39_value_gross: ORDER.value });
+
+        trackSoluteConversion();
+    }
+
+    /* ---------- billiger.de / solute: Conversion (nach solute-Leitfaden) ---------- */
+    function trackSoluteConversion() {
+        if (!SOLUTE || !ORDER || !ORDER.id) { return; }
+        if (!(window.S39Consent && window.S39Consent("s39Solute"))) { log("solute: keine Einwilligung"); return; }
+        try {
+            var stored = window.localStorage.getItem("soluteclid");
+            if (!stored) { log("solute: keine Klick-ID"); return; }
+            var parts = stored.split(" ");
+            var ttl = 1000 * 60 * 60 * 24 * 30;
+            if (Number(parts[0]) + ttl < new Date().getTime()) {
+                window.localStorage.removeItem("soluteclid");
+                log("solute: Klick-ID abgelaufen");
+                return;
+            }
+            var landing = parts.slice(1).join(" ");
+            var url = "https://cmodul.solutenetwork.com/conversion"
+                + "?val=" + encodeURIComponent(ORDER.valueNet)
+                + "&oid=" + encodeURIComponent(ORDER.id)
+                + "&factor=1"
+                + "&url=" + encodeURIComponent(landing);
+            var r = new XMLHttpRequest();
+            r.open("GET", url, true);
+            r.send();
+            log("solute: Conversion gemeldet", ORDER.id, ORDER.valueNet);
+        } catch (e) { log("solute Fehler", e); }
     }
 
     window.addEventListener("load", function () {

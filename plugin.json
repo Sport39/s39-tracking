@@ -1,10 +1,10 @@
 {
   "name": "S39Tracking",
-  "description": "TikTok- und Meta-Pixel fuer sport39.de mit Einwilligung ueber den Cookie-Banner (Sport39)",
+  "description": "Tracking fuer sport39.de mit Einwilligung ueber den Cookie-Banner: TikTok- und Meta-Pixel, Google Tag Manager (dataLayer, Consent Mode v2) und billiger.de/solute (Sport39)",
   "namespace": "S39Tracking",
   "author": "Sport39",
   "type": "template",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "proprietary",
   "isClosedSource": false,
   "serviceProvider": "S39Tracking\\Providers\\S39TrackingServiceProvider",
@@ -16,14 +16,14 @@
   "dataProviders": [
     {
       "key": "S39Tracking\\Providers\\HeadCodeProvider",
-      "name": "S39 Tracking: Pixel-Basiscode",
-      "description": "Laedt TikTok- und Meta-Pixel (nur nach Einwilligung)",
+      "name": "S39 Tracking: Basiscode (Pixel, Tag Manager, solute)",
+      "description": "Laedt TikTok-/Meta-Pixel und Google Tag Manager nur nach Einwilligung, merkt sich billiger.de-Klicks",
       "defaultLayoutContainer": "Ceres::Template.Style"
     },
     {
       "key": "S39Tracking\\Providers\\EventCodeProvider",
       "name": "S39 Tracking: Ereignisse",
-      "description": "Artikelansicht, Warenkorb, Anfragen und Kauf an die Pixel melden",
+      "description": "Artikelansicht, Warenkorb, Anfragen und Kauf an Pixel, dataLayer und billiger.de melden",
       "defaultLayoutContainer": "Ceres::Script.AfterScriptsLoaded"
     }
   ],
