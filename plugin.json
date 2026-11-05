@@ -4,7 +4,7 @@
   "namespace": "S39Tracking",
   "author": "Sport39",
   "type": "template",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "proprietary",
   "isClosedSource": false,
   "serviceProvider": "S39Tracking\\Providers\\S39TrackingServiceProvider",
